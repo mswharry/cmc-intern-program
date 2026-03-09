@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"mini-asm/internal/model"
 	"mini-asm/internal/storage"
 	"time"
@@ -24,7 +25,7 @@ func NewAssetService(storage storage.Storage) *AssetService {
 
 // CreateAsset creates a new asset with validation
 // Returns the created asset or an error
-func (s *AssetService) CreateAsset(name, assetType string) (*model.Asset, error) {
+func (s *AssetService) CreateAsset(name, assetType, status string) (*model.Asset, error) {
 	// Validation - business rules enforcement
 	if name == "" {
 		return nil, model.ErrEmptyName
@@ -34,12 +35,21 @@ func (s *AssetService) CreateAsset(name, assetType string) (*model.Asset, error)
 		return nil, model.ErrInvalidType
 	}
 
-	// Business logic - create asset with defaults
+	// Use provided status or default to active
+	if status == "" {
+		status = model.StatusActive
+	}
+
+	if !model.IsValidStatus(status) {
+		return nil, model.ErrInvalidStatus
+	}
+
+	// Business logic - create asset with validation
 	asset := &model.Asset{
 		ID:        uuid.New().String(), // Auto-generate UUID
 		Name:      name,
 		Type:      assetType,
-		Status:    model.StatusActive, // Default status
+		Status:    status,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
@@ -142,6 +152,70 @@ func (s *AssetService) SearchAssets(query string) ([]*model.Asset, error) {
 	return s.storage.Search(query)
 }
 
+func (s *AssetService) GetStatistics() (*model.StatisticsResponse, error) {
+	return s.storage.GetStatistics()
+}
+
+func (s *AssetService) GetCount(assetType, status string) (int, error) {
+	if assetType != "" && !model.IsValidType(assetType) {
+		return 0, model.ErrInvalidType
+	}
+	if status != "" && !model.IsValidStatus(status) {
+		return 0, model.ErrInvalidStatus
+	}
+
+	return s.storage.GetCount(assetType, status)
+}
+
+// CreateBatchAssets creates multiple assets in a transaction
+// Input: arrays of names and types (must have same length)
+// Output: array of created IDs or error (no partial create)
+func (s *AssetService) CreateBatchAssets(names []string, types []string) ([]string, error) {
+
+   if len(names) != len(types) {
+        return nil, errors.New("names and types must have same length")
+   }
+
+   if len(names) == 0 {
+      return nil, errors.New("must create at least 1 asset")
+   }
+   if len(names) > 100 {
+      return nil, errors.New("maximum 100 assets per request")
+   }
+
+    var assets []*model.Asset
+    for i, name := range names {
+      assetType := types[i]
+
+      if name == "" {
+         return nil, model.ErrEmptyName
+      }
+
+      if !model.IsValidType(assetType) {
+         return nil, model.ErrInvalidType
+      }
+
+      asset := &model.Asset{
+         ID:        uuid.New().String(),
+         Name:      name,
+         Type:      assetType,
+         Status:    model.StatusActive,
+         CreatedAt: time.Now(),
+         UpdatedAt: time.Now(),
+      }
+      assets = append(assets, asset)
+   }
+
+    return s.storage.CreateBatch(assets)
+}
+
+func (s *AssetService) DeleteBatchAssets(ids []string) (int, int, error) {
+	if len(ids) == 0 {
+		return 0, 0, errors.New("must provide at least 1 ID")
+	}
+
+	return s.storage.DeleteBatch(ids)
+}
 /*
 🎓 NOTES:
 

@@ -35,6 +35,14 @@ type Storage interface {
 
 	// Search finds assets by partial name match
 	Search(query string) ([]*model.Asset, error)
+
+    GetStatistics() (*model.StatisticsResponse, error)
+    
+    GetCount(assetType, status string) (int, error)
+
+    CreateBatch(assets []*model.Asset) ([]string, error)
+
+    DeleteBatch(ids []string) (int, int, error)
 }
 
 /*

@@ -1,15 +1,16 @@
 package main
 
 import (
-	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"mini-asm/internal/handler"
 	"mini-asm/internal/service"
 	"mini-asm/internal/storage/postgres"
+	"mini-asm/internal/database"
 
 	_ "github.com/lib/pq" // PostgreSQL driver
 )
@@ -24,8 +25,8 @@ func main() {
 	// Database configuration
 	dbHost := getEnv("DB_HOST", "localhost")
 	dbPort := getEnv("DB_PORT", "5432")
-	dbUser := getEnv("DB_USER", "secops")
-	dbPassword := getEnv("DB_PASSWORD", "secops123")
+	dbUser := getEnv("DB_USER", "postgres")
+	dbPassword := getEnv("DB_PASSWORD", "postgres")
 	dbName := getEnv("DB_NAME", "mini_asm")
 	dbSSLMode := getEnv("DB_SSLMODE", "disable")
 
@@ -41,24 +42,19 @@ func main() {
 	// DATABASE CONNECTION
 	// ============================================
 
-	// Open database connection
-	db, err := sql.Open("postgres", connStr)
+	// Open database connection with retry 1,2,4,8,16
+	db, err := database.ConnectWithRetry(connStr, 5)
 	if err != nil {
-		log.Fatal("❌ Failed to open database:", err)
+    	log.Fatal("Failed to connect to database:", err)
 	}
 	defer db.Close()
-
-	// Verify connection with ping
-	if err := db.Ping(); err != nil {
-		log.Fatal("❌ Failed to ping database:", err)
-	}
 
 	log.Println("✅ Database connected successfully")
 
 	// Optional: Configure connection pool
 	db.SetMaxOpenConns(25)               // Maximum open connections
 	db.SetMaxIdleConns(5)                // Maximum idle connections
-	db.SetConnMaxLifetime(5 * 60 * 1000) // Connection lifetime (5 minutes)
+	db.SetConnMaxLifetime(5 * time.Minute) // Connection lifetime (5 minutes)
 
 	// ============================================
 	// DEPENDENCY INJECTION - Wire up all layers
@@ -80,7 +76,7 @@ func main() {
 	// 3. Initialize Handler Layer (Presentation / HTTP)
 	//    ✨ NO CHANGES! Handler doesn't care about storage implementation
 	assetHandler := handler.NewAssetHandler(assetService)
-	healthHandler := handler.NewHealthHandler()
+	healthHandler := handler.NewHealthHandler(db)
 	log.Println("✅ Handlers initialized")
 
 	// ============================================
@@ -99,6 +95,12 @@ func main() {
 	mux.HandleFunc("PUT /assets/{id}", assetHandler.UpdateAsset)    // Update
 	mux.HandleFunc("DELETE /assets/{id}", assetHandler.DeleteAsset) // Delete
 
+	mux.HandleFunc("GET /assets/stats", assetHandler.GetStatistics) // Statistics
+	mux.HandleFunc("GET /assets/count", assetHandler.GetCount)           // Count with filters
+
+	mux.HandleFunc("POST /assets/batch", assetHandler.CreateAssetBatch) // Batch create
+	mux.HandleFunc("DELETE /assets/batch", assetHandler.DeleteAssetBatch) // Batch delete
+
 	log.Println("✅ Routes registered:")
 	log.Println("   GET    /health")
 	log.Println("   POST   /assets")
@@ -106,7 +108,10 @@ func main() {
 	log.Println("   GET    /assets/{id}")
 	log.Println("   PUT    /assets/{id}")
 	log.Println("   DELETE /assets/{id}")
-
+	log.Println("   GET    /assets/stats")
+	log.Println("   GET    /assets/count")
+	log.Println("   POST   /assets/batch")
+	log.Println("   DELETE /assets/batch")
 	// ============================================
 	// START SERVER
 	// ============================================

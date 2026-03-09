@@ -283,6 +283,162 @@ func (p *PostgresStorage) Search(query string) ([]*model.Asset, error) {
 	return assets, nil
 }
 
+func (p *PostgresStorage) GetStatistics() (*model.StatisticsResponse, error) {
+	var total int
+	err := p.db.QueryRow("SELECT COUNT(*) FROM assets").Scan(&total)
+	if err != nil{
+		return nil, fmt.Errorf("failed to count total assets: %w", err)
+	}
+
+	//Count theo type
+	byTypeRows, err := p.db.Query(`
+        SELECT type, COUNT(*) as count
+        FROM assets
+        GROUP BY type
+    `)
+    if err != nil {
+        return nil, fmt.Errorf("failed to group by type: %w", err)
+    }
+    defer byTypeRows.Close()
+
+	byType := make(map[string]int)
+    for byTypeRows.Next() {
+        var typeVal string
+        var count int
+        if err := byTypeRows.Scan(&typeVal, &count); err != nil {
+            return nil, fmt.Errorf("failed to scan type row: %w", err)
+        }
+        byType[typeVal] = count
+    }
+
+	if err := byTypeRows.Err(); err != nil {
+        return nil, fmt.Errorf("error reading type rows: %w", err)
+    }
+
+	//count theo status
+	byStatusRows, err := p.db.Query(`
+        SELECT status, COUNT(*) as count
+        FROM assets
+        GROUP BY status
+    `)
+    if err != nil {
+        return nil, fmt.Errorf("failed to group by status: %w", err)
+    }
+    defer byStatusRows.Close()
+
+    byStatus := make(map[string]int)
+    for byStatusRows.Next() {
+        var statusVal string
+        var count int
+        if err := byStatusRows.Scan(&statusVal, &count); err != nil {
+            return nil, fmt.Errorf("failed to scan status row: %w", err)
+        }
+        byStatus[statusVal] = count
+    }
+    
+    if err := byStatusRows.Err(); err != nil {
+        return nil, fmt.Errorf("error reading status rows: %w", err)
+    }
+
+    return &model.StatisticsResponse{
+        Total:    total,
+        ByType:   byType,
+        ByStatus: byStatus,
+    }, nil
+}
+
+func (p *PostgresStorage) GetCount(assetType, status string) (int, error) {
+
+    query := "SELECT COUNT(*) FROM assets WHERE 1=1"
+    var args []interface{}
+    argIndex := 1
+
+    if assetType != "" {
+        query += fmt.Sprintf(" AND type = $%d", argIndex)
+        args = append(args, assetType)
+        argIndex++
+    }
+
+    if status != "" {
+        query += fmt.Sprintf(" AND status = $%d", argIndex)
+        args = append(args, status)
+        argIndex++
+    }
+
+    var count int
+    err := p.db.QueryRow(query, args...).Scan(&count)
+    if err != nil {
+        return 0, fmt.Errorf("failed to count assets: %w", err)
+    }
+
+    return count, nil
+}
+
+func (p *PostgresStorage) CreateBatch(assets []*model.Asset) ([]string, error) {
+	tx, err := p.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+	query := `
+		INSERT INTO assets (id, name, type, status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`
+
+	var ids []string
+	for _, asset := range assets {
+		_, err := tx.Exec(
+			query,
+			asset.ID,
+			asset.Name,
+			asset.Type,
+			asset.Status,
+			asset.CreatedAt,
+			asset.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create asset: %w", err)
+		}
+		ids = append(ids, asset.ID)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return ids, nil
+}
+
+func (p *PostgresStorage) DeleteBatch(ids []string) (int, int, error) {
+	if len(ids) == 0 {
+        return 0, 0, nil
+    }
+
+    query := "DELETE FROM assets WHERE id = $1"
+
+    var deletedCount int
+    var notFoundCount int
+
+    for _, id := range ids {
+
+        result, err := p.db.Exec(query, id)
+        if err != nil {
+            return 0, 0, fmt.Errorf("failed to delete asset %s: %w", id, err)
+        }
+
+        rowsAffected, err := result.RowsAffected()
+        if err != nil {
+            return 0, 0, fmt.Errorf("failed to get rows affected: %w", err)
+        }
+
+        if rowsAffected == 0 {
+            notFoundCount++
+        } else {
+            deletedCount++
+        }
+    }
+
+    return deletedCount, notFoundCount, nil
+}
 /*
 🎓 TEACHING NOTES:
 

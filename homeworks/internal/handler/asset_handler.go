@@ -6,6 +6,7 @@ import (
 	"mini-asm/internal/model"
 	"mini-asm/internal/service"
 	"net/http"
+	"strings"
 )
 
 // AssetHandler handles HTTP requests for asset operations
@@ -44,8 +45,8 @@ func (h *AssetHandler) CreateAsset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Call service layer
-	asset, err := h.service.CreateAsset(req.Name, req.Type)
+	// Call service layer with status (defaults to "active" if not provided)
+	asset, err := h.service.CreateAsset(req.Name, req.Type, req.Status)
 	if err != nil {
 		// Map service errors to HTTP status codes
 		statusCode := mapErrorToStatus(err)
@@ -195,6 +196,97 @@ func RespondError(w http.ResponseWriter, status int, message string) {
 	})
 }
 
+func (h *AssetHandler) GetStatistics(w http.ResponseWriter, r *http.Request) {
+	stats, err := h.service.GetStatistics()
+	if err != nil {
+		statusCode := mapErrorToStatus(err)
+		RespondError(w, statusCode, err.Error())
+		return
+	}
+
+	RespondJSON(w, http.StatusOK, stats)
+}
+func (h *AssetHandler) GetCount(w http.ResponseWriter, r *http.Request) {
+	typeFilter := r.URL.Query().Get("type")
+	statusFilter := r.URL.Query().Get("status")
+
+	count, err := h.service.GetCount(typeFilter, statusFilter)
+	if err != nil {
+		statusCode := mapErrorToStatus(err)
+		RespondError(w, statusCode, err.Error())
+		return
+	}
+	filters := make(map[string]string)
+	if typeFilter != "" {
+		filters["type"] = typeFilter
+	}
+	if statusFilter != "" {
+		filters["status"] = statusFilter
+	}
+	response := model.CountResponse{
+		Count: count,
+		Filters: filters,
+	}
+
+	RespondJSON(w, http.StatusOK, response)
+}
+
+func (h *AssetHandler) CreateAssetBatch(w http.ResponseWriter, r *http.Request) {
+	var req model.BatchCreateAssetsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		RespondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+	names := make([]string, len(req.Assets))
+    types := make([]string, len(req.Assets))
+    
+    for i, asset := range req.Assets {
+        names[i] = asset.Name
+        types[i] = asset.Type
+    }
+
+    ids, err := h.service.CreateBatchAssets(names, types)
+
+    if err != nil {
+        statusCode := mapErrorToStatus(err)
+        RespondError(w, statusCode, err.Error())
+        return
+    }
+
+    response := model.BatchCreateAssetsResponse{
+        Created: len(ids),
+        IDs:     ids,
+    }
+
+    RespondJSON(w, http.StatusCreated, response)
+}
+// Xoa asset theo batch
+func (h *AssetHandler) DeleteAssetBatch(w http.ResponseWriter, r *http.Request) {
+    
+    idsParam := r.URL.Query().Get("ids")
+
+    if idsParam == "" {
+        RespondError(w, http.StatusBadRequest, "ids parameter required")
+        return
+    }
+
+    ids := strings.Split(idsParam, ",")
+
+    deleted, notFound, err := h.service.DeleteBatchAssets(ids)
+
+    if err != nil {
+        statusCode := mapErrorToStatus(err)
+        RespondError(w, statusCode, err.Error())
+        return
+    }
+
+    response := model.BatchDeleteAssetsResponse{
+        Deleted:  deleted,
+        NotFound: notFound,
+    }
+
+    RespondJSON(w, http.StatusOK, response)
+}
 /*
 🎓 NOTES:
 

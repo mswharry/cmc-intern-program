@@ -1,43 +1,65 @@
 package handler
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"time"
+	"mini-asm/internal/model"
 )
 
 // HealthHandler handles health check requests
 type HealthHandler struct {
-	startTime time.Time
+	db *sql.DB
 }
 
 // NewHealthHandler creates a new health check handler
-func NewHealthHandler() *HealthHandler {
+func NewHealthHandler(db *sql.DB) *HealthHandler {
 	return &HealthHandler{
-		startTime: time.Now(),
+		db: db,
 	}
 }
 
-// HealthResponse represents the health check response
-type HealthResponse struct {
-	Status    string        `json:"status"`
-	Message   string        `json:"message"`
-	Uptime    time.Duration `json:"uptime_seconds"`
-	Timestamp time.Time     `json:"timestamp"`
-}
-
-// Check handles GET /health
 func (h *HealthHandler) Check(w http.ResponseWriter, r *http.Request) {
-	response := HealthResponse{
-		Status:    "ok",
-		Message:   "Mini ASM service is running",
-		Uptime:    time.Since(h.startTime),
-		Timestamp: time.Now(),
-	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
+    response := model.HealthCheckResponse{
+        Status:    "ok",                    
+        Timestamp: time.Now().UTC(),
+    }
+
+    dbStatus := "disconnected"
+    statusCode := http.StatusServiceUnavailable
+
+    // Check database connection
+    if h.db != nil && h.db.Ping() == nil {
+        dbStatus = "connected"
+        statusCode = http.StatusOK
+        
+        // Only get stats if database is connected
+        stats := h.db.Stats()
+        response.Database = model.DatabaseStats{
+            Status:          dbStatus,
+            OpenConnections: stats.OpenConnections,
+            InUse:           stats.InUse,
+            Idle:            stats.Idle,
+            MaxOpen:         stats.MaxOpenConnections,
+        }
+    } else {
+        // Database disconnected - return minimal info
+        response.Status = "degraded"
+        statusCode = http.StatusServiceUnavailable
+        response.Database = model.DatabaseStats{
+            Status:          dbStatus,
+            OpenConnections: 0,
+            InUse:           0,
+            Idle:            0,
+            MaxOpen:         0,
+        }
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(statusCode)
+    json.NewEncoder(w).Encode(response)
 }
 
 /*
