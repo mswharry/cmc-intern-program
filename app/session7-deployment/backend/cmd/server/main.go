@@ -143,7 +143,9 @@ func main() {
 	log.Println()
 	log.Println("Press Ctrl+C to stop")
 
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	withCORS := handler.CORSMiddleware(mux)
+
+	if err := http.ListenAndServe(addr, withCORS); err != nil {
 		log.Fatal("❌ Server failed to start:", err)
 	}
 }

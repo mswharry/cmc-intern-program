@@ -1,0 +1,21 @@
+name: Day3
+values:
+  - key: baseUrl
+    value: ''
+    enabled: true
+  - key: domainAssetId
+    value: ''
+    enabled: true
+  - key: ipAssetId
+    value: ''
+    enabled: true
+  - key: ipJobId
+    value: ''
+    enabled: true
+  - key: portJobId
+    value: ''
+    enabled: true
+  - key: publicIpAssetId
+    value: ''
+    enabled: true
+color: 120

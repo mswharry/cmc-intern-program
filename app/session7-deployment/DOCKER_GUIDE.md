@@ -27,44 +27,44 @@ session7-deployment/
 
 ```bash
 # From the session7-deployment directory
-docker-compose up -d
+docker compose up -d
 ```
 
 This will start:
 
-- **PostgreSQL** database on port `5432`
+- **PostgreSQL** database on host port `7432` (container `5432`)
 - **Backend API** on port `8080`
 - **Frontend** on port `3000`
-- **pgAdmin** (optional) on port `5050`
+- **pgAdmin** is optional and currently commented out in compose
 
 ### Check Service Status
 
 ```bash
-docker-compose ps
+docker compose ps
 ```
 
 ### View Logs
 
 ```bash
 # All services
-docker-compose logs -f
+docker compose logs -f
 
 # Specific service
-docker-compose logs -f backend
-docker-compose logs -f frontend
-docker-compose logs -f db
+docker compose logs -f backend
+docker compose logs -f frontend
+docker compose logs -f db
 ```
 
 ### Stop All Services
 
 ```bash
-docker-compose down
+docker compose down
 ```
 
 ### Stop and Remove Volumes (Clean Reset)
 
 ```bash
-docker-compose down -v
+docker compose down -v
 ```
 
 ## 🌐 Access Points
@@ -74,10 +74,11 @@ docker-compose down -v
 | Frontend     | http://localhost:3000        | React application       |
 | Backend API  | http://localhost:8080        | Go REST API             |
 | Health Check | http://localhost:8080/health | API health status       |
-| pgAdmin      | http://localhost:5050        | Database GUI (optional) |
-| PostgreSQL   | localhost:5432               | Direct database access  |
+| PostgreSQL   | localhost:7432               | Direct database access  |
 
-### pgAdmin Credentials
+> pgAdmin is optional and disabled by default in [app/session7-deployment/docker-compose.yml](app/session7-deployment/docker-compose.yml).
+
+### pgAdmin Credentials (if enabled)
 
 - **Email:** admin@miniasm.com
 - **Password:** admin
@@ -93,7 +94,7 @@ docker-compose down -v
   - `DB_HOST`: Database host (default: db)
   - `DB_PORT`: Database port (default: 5432)
   - `DB_USER`: Database user (default: postgres)
-  - `DB_PASSWORD`: Database password (default: postgres)
+  - `DB_PASSWORD`: Database password (default: postgres@123)
   - `DB_NAME`: Database name (default: mini_asm)
 
 ### Frontend (React + Vite)
@@ -113,7 +114,7 @@ docker-compose down -v
 - **Port:** 5432
 - **Default Credentials:**
   - User: postgres
-  - Password: postgres
+  - Password: postgres@123
   - Database: mini_asm
 - **Migrations:** Auto-applied on first startup
 
@@ -123,39 +124,39 @@ docker-compose down -v
 
 ```bash
 # Rebuild backend
-docker-compose build backend
+docker compose build backend
 
 # Rebuild frontend
-docker-compose build frontend
+docker compose build frontend
 
 # Rebuild all
-docker-compose build
+docker compose build
 ```
 
 ### Restart Service
 
 ```bash
-docker-compose restart backend
-docker-compose restart frontend
+docker compose restart backend
+docker compose restart frontend
 ```
 
 ### Execute Commands in Container
 
 ```bash
 # Backend shell
-docker-compose exec backend sh
+docker compose exec backend sh
 
 # Frontend shell
-docker-compose exec frontend sh
+docker compose exec frontend sh
 
 # Database shell
-docker-compose exec db psql -U postgres -d mini_asm
+docker compose exec db psql -U postgres -d mini_asm
 ```
 
 ### Scale Services (if needed)
 
 ```bash
-docker-compose up -d --scale backend=3
+docker compose up -d --scale backend=3
 ```
 
 ## 🧪 Testing the Deployment
@@ -170,8 +171,10 @@ Expected response:
 
 ```json
 {
-  "status": "healthy",
-  "database": "connected"
+  "status": "ok",
+  "message": "Mini ASM service is running",
+  "uptime_seconds": 123.45,
+  "timestamp": "2026-03-20T00:00:00Z"
 }
 ```
 
@@ -181,9 +184,9 @@ Expected response:
 curl -X POST http://localhost:8080/assets \
   -H "Content-Type: application/json" \
   -d '{
-    "domain": "example.com",
+    "name": "example.com",
     "type": "domain",
-    "criticality": "high"
+    "status": "active"
   }'
 ```
 
@@ -203,10 +206,10 @@ Open http://localhost:3000 in your browser
 
 ```bash
 # Check database is ready
-docker-compose logs db
+docker compose logs db
 
 # Verify backend env vars
-docker-compose exec backend env | grep DB_
+docker compose exec backend env | grep DB_
 ```
 
 ### Frontend Can't Reach Backend
@@ -216,10 +219,10 @@ docker-compose exec backend env | grep DB_
 curl http://localhost:8080/health
 
 # Check frontend logs
-docker-compose logs frontend
+docker compose logs frontend
 
 # Verify nginx proxy config
-docker-compose exec frontend cat /etc/nginx/conf.d/default.conf
+docker compose exec frontend cat /etc/nginx/conf.d/default.conf
 ```
 
 ### Port Already in Use
@@ -229,30 +232,30 @@ docker-compose exec frontend cat /etc/nginx/conf.d/default.conf
 sudo lsof -i :8080
 sudo lsof -i :3000
 
-# Stop the conflicting service or change port in docker-compose.yml
+# Stop the conflicting service or change port in [app/session7-deployment/docker-compose.yml](app/session7-deployment/docker-compose.yml)
 ```
 
 ### Database Migration Issues
 
 ```bash
 # Check migration files are copied
-docker-compose exec backend ls -la migrations/
+docker compose exec backend ls -la migrations/
 
 # Manually run migrations
-docker-compose exec db psql -U postgres -d mini_asm -f /docker-entrypoint-initdb.d/001_create_assets.up.sql
+docker compose exec db psql -U postgres -d mini_asm -f /docker-entrypoint-initdb.d/001_create_assets.up.sql
 ```
 
 ### Clean Start (Nuclear Option)
 
 ```bash
 # Stop everything
-docker-compose down -v
+docker compose down -v
 
 # Remove all containers, images, and volumes
 docker system prune -a --volumes
 
 # Rebuild and start
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
 ## 🔒 Production Considerations
@@ -294,10 +297,18 @@ docker-compose up -d --build
 
 ```bash
 # Database backup
-docker-compose exec db pg_dump -U postgres mini_asm > backup.sql
+docker compose exec db pg_dump -U postgres mini_asm > backup.sql
 
 # Restore
-docker-compose exec -T db psql -U postgres mini_asm < backup.sql
+docker compose exec -T db psql -U postgres mini_asm < backup.sql
+
+## Homework 5 Submission Checklist
+
+- Run `docker compose up -d` successfully.
+- Capture screenshot of `docker compose ps` showing `db`, `backend`, `frontend` are Up/healthy.
+- Capture screenshot of frontend at `http://localhost:3000`.
+- Capture output of `curl http://localhost:8080/health` showing `status: ok`.
+- Optional extra proof: `docker compose logs --tail 50 backend` with no fatal errors.
 ```
 
 ## 📚 Additional Resources
