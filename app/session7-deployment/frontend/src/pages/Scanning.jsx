@@ -151,6 +151,23 @@ function Scanning() {
   };
 
   const selectedAssetData = assets.find((a) => a.id === selectedAsset);
+  const availableScanTypes = SCAN_TYPES.filter((type) =>
+    SCAN_TYPES_BY_ASSET[selectedAssetData?.type || ""]?.includes(type.value),
+  );
+
+  useEffect(() => {
+    if (!selectedAssetData) return;
+
+    const allowed = SCAN_TYPES_BY_ASSET[selectedAssetData.type] || [];
+    if (allowed.length === 0) {
+      setSelectedScanType("");
+      return;
+    }
+
+    if (!allowed.includes(selectedScanType)) {
+      setSelectedScanType(allowed[0]);
+    }
+  }, [selectedAssetData, selectedScanType]);
 
   return (
     <div>
@@ -201,12 +218,17 @@ function Scanning() {
                   className="form-select"
                   value={selectedScanType}
                   onChange={(e) => setSelectedScanType(e.target.value)}
+                  disabled={availableScanTypes.length === 0}
                 >
-                  {SCAN_TYPES.map((type) => (
-                    <option key={type.value} value={type.value}>
-                      {type.label} {type.passive ? "🟢" : "🔴"}
-                    </option>
-                  ))}
+                  {availableScanTypes.length === 0 ? (
+                    <option value="">No supported scan type for this asset</option>
+                  ) : (
+                    availableScanTypes.map((type) => (
+                      <option key={type.value} value={type.value}>
+                        {type.label} {type.passive ? "🟢" : "🔴"}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
 
@@ -224,7 +246,7 @@ function Scanning() {
               <button
                 className="btn btn-primary w-full"
                 onClick={handleStartScan}
-                disabled={scanning || !selectedAsset}
+                disabled={scanning || !selectedAsset || !selectedScanType}
               >
                 {scanning ? (
                   <>
@@ -289,10 +311,7 @@ function Scanning() {
                   <strong>Subdomain:</strong> Enumerate subdomains
                 </li>
                 <li>
-                  <strong>Cert Trans:</strong> Certificate Transparency logs
-                </li>
-                <li>
-                  <strong>ASN:</strong> Autonomous System lookup
+                  <strong>IP:</strong> Geolocation, ASN, reverse DNS (for IP assets)
                 </li>
               </ul>
             </div>
@@ -307,9 +326,6 @@ function Scanning() {
               >
                 <li>
                   <strong>Port:</strong> TCP/UDP port scanning
-                </li>
-                <li>
-                  <strong>SSL:</strong> SSL/TLS certificate probing
                 </li>
               </ul>
             </div>

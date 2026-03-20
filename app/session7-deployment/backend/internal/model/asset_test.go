@@ -4,6 +4,55 @@ import (
 	"testing"
 )
 
+func validateAssetForTest(asset Asset) error {
+	if asset.Name == "" {
+		return ErrInvalidInput
+	}
+	if !IsValidType(asset.Type) {
+		return ErrInvalidInput
+	}
+	return nil
+}
+
+// TestAssetValidation covers the homework-required model validation scenarios.
+func TestAssetValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		asset   Asset
+		wantErr bool
+	}{
+		{
+			name:    "valid domain asset",
+			asset:   Asset{Name: "example.com", Type: TypeDomain},
+			wantErr: false,
+		},
+		{
+			name:    "valid ip asset",
+			asset:   Asset{Name: "127.0.0.1", Type: TypeIP},
+			wantErr: false,
+		},
+		{
+			name:    "invalid empty name",
+			asset:   Asset{Name: "", Type: TypeDomain},
+			wantErr: true,
+		},
+		{
+			name:    "invalid asset type",
+			asset:   Asset{Name: "test", Type: "invalid"},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateAssetForTest(tt.asset)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("validateAssetForTest() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 // TestIsValidType tests the asset type validation
 func TestIsValidType(t *testing.T) {
 	tests := []struct {

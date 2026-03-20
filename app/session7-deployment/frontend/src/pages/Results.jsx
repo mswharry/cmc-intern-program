@@ -20,6 +20,8 @@ function Results() {
   const [whoisData, setWhoisData] = useState(null);
   const [dnsData, setDnsData] = useState([]);
   const [subdomainData, setSubdomainData] = useState([]);
+  const [ipData, setIPData] = useState([]);
+  const [portData, setPortData] = useState([]);
 
   // Pagination state for each type
   const [whoisPage, setWhoisPage] = useState(1);
@@ -119,6 +121,12 @@ function Results() {
     }
   }, [selectedAsset, resultType]);
 
+  useEffect(() => {
+    if (selectedAsset && (resultType === "ip" || resultType === "port")) {
+      loadIPAndPortResults();
+    }
+  }, [selectedAsset, resultType]);
+
   const loadAssets = async () => {
     try {
       const data = await assetsAPI.list({ page_size: 100 });
@@ -136,6 +144,10 @@ function Results() {
     setError("");
 
     try {
+      const allData = await resultsAPI.getAll(assetId);
+      setIPData(allData.ip_results || []);
+      setPortData(allData.port_results || []);
+
       // Load WHOIS first
       await loadWhoisResults(assetId);
       // Then load DNS with reset filters
@@ -150,6 +162,18 @@ function Results() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadIPAndPortResults = async (assetId = selectedAsset) => {
+    try {
+      const data = await resultsAPI.getAll(assetId);
+      setIPData(data.ip_results || []);
+      setPortData(data.port_results || []);
+    } catch (err) {
+      console.error("Failed to load IP/Port results:", err);
+      setIPData([]);
+      setPortData([]);
     }
   };
 
@@ -243,6 +267,8 @@ function Results() {
         await loadSubdomainResults();
       } else if (resultType === "whois") {
         await loadWhoisResults();
+      } else if (resultType === "ip" || resultType === "port") {
+        await loadIPAndPortResults();
       }
     } catch (err) {
       setError(err.message);
@@ -638,6 +664,112 @@ function Results() {
     );
   };
 
+  const renderIPResults = (results) => {
+    if (!results || results.length === 0) {
+      return (
+        <div className="p-4">
+          <p className="text-muted">No IP scan results found</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="table-container">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>IP Address</th>
+              <th>Location</th>
+              <th>ASN</th>
+              <th>Reverse DNS</th>
+              <th>Scanned</th>
+            </tr>
+          </thead>
+          <tbody>
+            {results.map((item, idx) => (
+              <tr key={item.id || idx}>
+                <td className="font-medium">{item.ip_address || "N/A"}</td>
+                <td className="text-sm">
+                  {[item.geolocation?.city, item.geolocation?.country]
+                    .filter(Boolean)
+                    .join(", ") || "N/A"}
+                </td>
+                <td className="text-sm">
+                  {item.asn?.number ? `AS${item.asn.number}` : "N/A"}
+                  {item.asn?.name ? ` (${item.asn.name})` : ""}
+                </td>
+                <td className="text-sm">{item.reverse_dns || "N/A"}</td>
+                <td className="text-sm text-muted">
+                  {item.created_at
+                    ? new Date(item.created_at).toLocaleString()
+                    : "N/A"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  const renderPortResults = (results) => {
+    if (!results || results.length === 0) {
+      return (
+        <div className="p-4">
+          <p className="text-muted">No Port scan results found</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="table-container">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>IP Address</th>
+              <th>Open Ports</th>
+              <th>Summary</th>
+              <th>Scanned</th>
+            </tr>
+          </thead>
+          <tbody>
+            {results.map((item, idx) => (
+              <tr key={item.id || idx}>
+                <td className="font-medium">{item.ip_address || "N/A"}</td>
+                <td>
+                  <div className="flex flex-wrap gap-2">
+                    {(item.open_ports || []).length === 0 ? (
+                      <span className="text-sm text-muted">No open ports</span>
+                    ) : (
+                      (item.open_ports || []).map((port, pIdx) => (
+                        <span key={pIdx} className="badge badge-info">
+                          {port.port}/{port.protocol}
+                        </span>
+                      ))
+                    )}
+                  </div>
+                </td>
+                <td className="text-sm">
+                  <div>
+                    Open: {(item.open_ports || []).length} / Total: {item.total_scanned || 0}
+                  </div>
+                  <div className="text-muted">
+                    Closed: {item.closed_ports || 0} | Duration: {item.scan_duration_ms || 0}ms
+                  </div>
+                </td>
+                <td className="text-sm text-muted">
+                  {item.created_at
+                    ? new Date(item.created_at).toLocaleString()
+                    : "N/A"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
   const renderAllResults = () => {
     return (
       <div className="space-y-6">
@@ -672,6 +804,26 @@ function Results() {
             </h3>
           </div>
           {renderSubdomains(subdomainData, true)}
+        </div>
+
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title flex items-center">
+              <Server size={20} className="mr-2" />
+              IP Scan Results ({ipData.length})
+            </h3>
+          </div>
+          {renderIPResults(ipData)}
+        </div>
+
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title flex items-center">
+              <Server size={20} className="mr-2" />
+              Port Scan Results ({portData.length})
+            </h3>
+          </div>
+          {renderPortResults(portData)}
         </div>
       </div>
     );
@@ -721,6 +873,8 @@ function Results() {
               <option value="dns">DNS Records</option>
               <option value="subdomains">Subdomains</option>
               <option value="whois">WHOIS Information</option>
+              <option value="ip">IP Scan Results</option>
+              <option value="port">Port Scan Results</option>
             </select>
           </div>
         </div>
@@ -798,6 +952,30 @@ function Results() {
                 </h3>
               </div>
               {renderWHOIS(whoisData)}
+            </div>
+          )}
+
+          {resultType === "ip" && (
+            <div className="card">
+              <div className="card-header">
+                <h3 className="card-title">
+                  <Server size={20} className="inline mr-2" />
+                  IP Scan Results
+                </h3>
+              </div>
+              {renderIPResults(ipData)}
+            </div>
+          )}
+
+          {resultType === "port" && (
+            <div className="card">
+              <div className="card-header">
+                <h3 className="card-title">
+                  <Server size={20} className="inline mr-2" />
+                  Port Scan Results
+                </h3>
+              </div>
+              {renderPortResults(portData)}
             </div>
           )}
         </>
