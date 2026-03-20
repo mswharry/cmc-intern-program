@@ -31,11 +31,12 @@ const (
 	ScanTypeDNS       ScanType = "dns"        // Public DNS queries
 	ScanTypeWHOIS     ScanType = "whois"      // Public WHOIS database
 	ScanTypeCertTrans ScanType = "cert_trans" // Certificate Transparency logs
-
+	ScanTypeIP        ScanType = "ip"         // IP geolocation + ASN + reverse DNS
 	// Active Scans - ⚠️ REQUIRE PERMISSION ⚠️
 	ScanTypePort ScanType = "port" // Port scanning (TCP/UDP probes)
 	ScanTypeASN  ScanType = "asn"  // ASN lookup (passive, but included for organization)
 	ScanTypeSSL  ScanType = "ssl"  // SSL/TLS probing
+	ScanTypeTech ScanType = "tech"
 )
 
 // ScanStatus represents the status of a scan
@@ -60,6 +61,23 @@ type ScanJob struct {
 	Error     string     `json:"error"`      // Error message if failed
 	Results   int        `json:"results"`    // Number of results found
 	CreatedAt time.Time  `json:"created_at"`
+}
+
+type GeoLocation struct {
+	Country     string  `json:"country"`
+	CountryCode string  `json:"country_code"`
+	City        string  `json:"city"`
+	Region      string  `json:"region"`
+	Latitude    float64 `json:"latitude"`
+	Longitude   float64 `json:"longitude"`
+	ISP         string  `json:"isp"`
+	Org         string  `json:"org"`
+}
+
+type ASNInfo struct {
+	Number      int    `json:"number"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
 }
 
 // Subdomain represents a discovered subdomain
@@ -100,11 +118,42 @@ type WHOISRecord struct {
 	CreatedAt   time.Time  `json:"created_at"`
 }
 
+type IPScanResult struct {
+	ID          string      `json:"id"`
+	AssetID     string      `json:"asset_id"`
+	ScanJobID   string      `json:"scan_job_id"`
+	IPAddress   string      `json:"ip_address"`
+	Geolocation GeoLocation `json:"geolocation"`
+	ASN         ASNInfo     `json:"asn"`
+	ReverseDNS  string      `json:"reverse_dns"`
+	CreatedAt   time.Time   `json:"created_at"`
+}
+
+type OpenPort struct {
+	Port     int    `json:"port"`
+	Protocol string `json:"protocol"`
+	State    string `json:"state"`
+	Service  string `json:"service"`
+	Version  string `json:"version"`
+}
+
+type PortScanResult struct {
+	ID             string     `json:"id"`
+	AssetID        string     `json:"asset_id"`
+	ScanJobID      string     `json:"scan_job_id"`
+	IPAddress      string     `json:"ip_address"`
+	OpenPorts      []OpenPort `json:"open_ports"`
+	ClosedPorts    int        `json:"closed_ports"`
+	TotalScanned   int        `json:"total_scanned"`
+	ScanDurationMS int        `json:"scan_duration_ms"`
+	CreatedAt      time.Time  `json:"created_at"`
+}
+
 // IsValidScanType checks if the given scan type is valid
 func IsValidScanType(t ScanType) bool {
 	switch t {
 	case ScanTypeAll, ScanTypeSubdomain, ScanTypeDNS, ScanTypeWHOIS, ScanTypeCertTrans,
-		ScanTypePort, ScanTypeASN, ScanTypeSSL:
+		ScanTypePort, ScanTypeASN, ScanTypeSSL, ScanTypeIP, ScanTypeTech:
 		return true
 	}
 	return false
@@ -114,7 +163,7 @@ func IsValidScanType(t ScanType) bool {
 func (st ScanType) Category() ScanCategory {
 	switch st {
 	// Passive scans - safe, OSINT-based
-	case ScanTypeAll, ScanTypeDNS, ScanTypeWHOIS, ScanTypeSubdomain, ScanTypeCertTrans, ScanTypeASN:
+	case ScanTypeAll, ScanTypeDNS, ScanTypeWHOIS, ScanTypeSubdomain, ScanTypeCertTrans, ScanTypeASN, ScanTypeIP:
 		return ScanCategoryPassive
 
 	// Active scans - require permission
@@ -162,6 +211,10 @@ func (st ScanType) Description() string {
 		return "Port scanning for open services (⚠️ active - requires permission)"
 	case ScanTypeSSL:
 		return "SSL/TLS certificate probing (⚠️ active - requires permission)"
+	case ScanTypeIP:
+		return "IP geolocation + ASN + reverse DNS (passive)"
+	case ScanTypeTech:
+		return "Technology detection from web response headers and HTML metadata (passive)"
 	default:
 		return string(st)
 	}

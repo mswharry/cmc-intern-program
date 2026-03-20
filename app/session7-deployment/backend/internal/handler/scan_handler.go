@@ -22,6 +22,14 @@ type PaginatedScanResults struct {
 	TotalPages int         `json:"total_pages"`
 }
 
+// ScanResultsResponse normalizes scan result payload format.
+// This keeps API responses consistent across all scan types.
+type ScanResultsResponse struct {
+	JobID    string         `json:"job_id"`
+	ScanType model.ScanType `json:"scan_type"`
+	Results  interface{}    `json:"results"`
+}
+
 // NewScanHandler creates a new scan handler
 func NewScanHandler(scanService *service.ScanService) *ScanHandler {
 	return &ScanHandler{
@@ -119,6 +127,13 @@ func (h *ScanHandler) GetScanResults(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	job, err := h.scanService.GetScanJob(jobID)
+	if err != nil {
+		status := mapErrorToStatus(err)
+		http.Error(w, err.Error(), status)
+		return
+	}
+
 	// Get results
 	results, err := h.scanService.GetScanResults(jobID)
 	if err != nil {
@@ -127,9 +142,15 @@ func (h *ScanHandler) GetScanResults(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	resp := ScanResultsResponse{
+		JobID:    job.ID,
+		ScanType: job.ScanType,
+		Results:  results,
+	}
+
 	// Return results
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(results)
+	json.NewEncoder(w).Encode(resp)
 }
 
 // ListScanJobs retrieves all scan jobs for an asset

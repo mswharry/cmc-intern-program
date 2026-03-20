@@ -461,6 +461,14 @@ paths:
                 summary: DNS scan
                 value:
                   scan_type: dns
+              ip_scan:
+                summary: IP scan
+                value:
+                  scan_type: ip
+              port_scan:
+                summary: Port scan
+                value:
+                  scan_type: port
               whois_scan:
                 summary: WHOIS scan
                 value:
@@ -663,6 +671,8 @@ paths:
         - `dns` → DNSRecord[]
         - `whois` → WHOISRecord
         - `subdomain` → Subdomain[]
+        - `ip` → IPScanResult[]
+        - `port` → PortScanResult[]
         - `all` → Mixed results
 
       operationId: getScanResults
@@ -690,6 +700,8 @@ paths:
                         - $ref: "#/components/schemas/DNSRecord"
                         - $ref: "#/components/schemas/WHOISRecord"
                         - $ref: "#/components/schemas/Subdomain"
+                        - $ref: "#/components/schemas/IPScanResult"
+                        - $ref: "#/components/schemas/PortScanResult"
         "404":
           description: Scan job not found or no results
           content:
@@ -1077,6 +1089,120 @@ components:
           type: string
           format: date-time
 
+    IPScanResult:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        asset_id:
+          type: string
+          format: uuid
+        scan_job_id:
+          type: string
+          format: uuid
+        ip_address:
+          type: string
+          example: 127.0.0.1
+        geolocation:
+          type: object
+          properties:
+            country:
+              type: string
+              example: Local
+            country_code:
+              type: string
+              example: LO
+            city:
+              type: string
+              example: Localhost
+            region:
+              type: string
+              example: Loopback
+            latitude:
+              type: number
+              format: double
+              example: 0
+            longitude:
+              type: number
+              format: double
+              example: 0
+            isp:
+              type: string
+              example: Local Network
+            org:
+              type: string
+              example: Training
+        asn:
+          type: object
+          properties:
+            number:
+              type: integer
+              example: 0
+            name:
+              type: string
+              example: LOCAL
+            description:
+              type: string
+              example: Private/local network
+        reverse_dns:
+          type: string
+          example: localhost
+        created_at:
+          type: string
+          format: date-time
+
+    OpenPort:
+      type: object
+      properties:
+        port:
+          type: integer
+          example: 5432
+        protocol:
+          type: string
+          example: tcp
+        state:
+          type: string
+          example: open
+        service:
+          type: string
+          example: postgresql
+        version:
+          type: string
+          example: ""
+
+    PortScanResult:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        asset_id:
+          type: string
+          format: uuid
+        scan_job_id:
+          type: string
+          format: uuid
+        ip_address:
+          type: string
+          example: 127.0.0.1
+        open_ports:
+          type: array
+          items:
+            $ref: "#/components/schemas/OpenPort"
+        closed_ports:
+          type: integer
+          example: 12
+        total_scanned:
+          type: integer
+          example: 16
+        scan_duration_ms:
+          type: integer
+          example: 250
+        created_at:
+          type: string
+          format: date-time
+
     # ============================================
     # ENUMS
     # ============================================
@@ -1090,6 +1216,7 @@ components:
         - subdomain
         - cert_trans
         - asn
+        - ip
         - port
         - ssl
       example: dns
@@ -1101,6 +1228,7 @@ components:
         - `subdomain`: Subdomain enumeration (passive)
         - `cert_trans`: Certificate Transparency logs (passive)
         - `asn`: ASN lookup (passive)
+        - `ip`: IP geolocation + ASN + reverse DNS (passive)
         - `port`: Port scanning (⚠️ active - requires permission)
         - `ssl`: SSL/TLS probing (⚠️ active - requires permission)
 

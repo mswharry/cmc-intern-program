@@ -80,6 +80,14 @@ type ScanStorage interface {
 	CreateWHOISRecord(record *model.WHOISRecord) error
 	GetWHOISRecordByAsset(assetID string) (*model.WHOISRecord, error)
 	GetWHOISRecordsByScan(scanJobID string) ([]*model.WHOISRecord, error)
+
+	CreateIPScanResult(result *model.IPScanResult) error
+	GetIPScanResultsByScan(scanJobID string) ([]*model.IPScanResult, error)
+	GetIPScanResultsByAsset(assetID string) ([]*model.IPScanResult, error)
+
+	CreatePortScanResult(result *model.PortScanResult) error
+	GetPortScanResultsByScan(scanJobID string) ([]*model.PortScanResult, error)
+	GetPortScanResultsByAsset(assetID string) ([]*model.PortScanResult, error)
 }
 
 /*

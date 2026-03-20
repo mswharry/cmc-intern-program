@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -871,16 +872,192 @@ func (p *PostgresStorage) GetWHOISRecordsByScan(scanJobID string) ([]*model.WHOI
 	return records, nil
 }
 
+// CreateIPScanResult inserts an IP scan result into the database
+func (p *PostgresStorage) CreateIPScanResult(result *model.IPScanResult) error {
+	geoJSON, err := json.Marshal(result.Geolocation)
+	if err != nil {
+		return fmt.Errorf("failed to marshal geolocation: %w", err)
+	}
+	asnJSON, err := json.Marshal(result.ASN)
+	if err != nil {
+		return fmt.Errorf("failed to marshal asn: %w", err)
+	}
+
+	query := `
+		INSERT INTO ip_scan_results (id, asset_id, scan_job_id, ip_address, geolocation_json, asn_json, reverse_dns, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`
+
+	_, err = p.db.Exec(
+		query,
+		result.ID,
+		result.AssetID,
+		result.ScanJobID,
+		result.IPAddress,
+		geoJSON,
+		asnJSON,
+		result.ReverseDNS,
+		result.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create ip scan result: %w", err)
+	}
+
+	return nil
+}
+
+// GetIPScanResultsByScan retrieves IP scan results by scan job ID
+func (p *PostgresStorage) GetIPScanResultsByScan(scanJobID string) ([]*model.IPScanResult, error) {
+	query := `
+		SELECT id, asset_id, scan_job_id, ip_address, geolocation_json, asn_json, reverse_dns, created_at
+		FROM ip_scan_results
+		WHERE scan_job_id = $1
+		ORDER BY created_at DESC
+	`
+	return p.queryIPScanResults(query, scanJobID)
+}
+
+// GetIPScanResultsByAsset retrieves IP scan results by asset ID
+func (p *PostgresStorage) GetIPScanResultsByAsset(assetID string) ([]*model.IPScanResult, error) {
+	query := `
+		SELECT id, asset_id, scan_job_id, ip_address, geolocation_json, asn_json, reverse_dns, created_at
+		FROM ip_scan_results
+		WHERE asset_id = $1
+		ORDER BY created_at DESC
+	`
+	return p.queryIPScanResults(query, assetID)
+}
+
+func (p *PostgresStorage) queryIPScanResults(query string, arg string) ([]*model.IPScanResult, error) {
+	rows, err := p.db.Query(query, arg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query ip scan results: %w", err)
+	}
+	defer rows.Close()
+
+	results := []*model.IPScanResult{}
+	for rows.Next() {
+		var geoRaw []byte
+		var asnRaw []byte
+		result := &model.IPScanResult{}
+		err := rows.Scan(
+			&result.ID,
+			&result.AssetID,
+			&result.ScanJobID,
+			&result.IPAddress,
+			&geoRaw,
+			&asnRaw,
+			&result.ReverseDNS,
+			&result.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan ip result: %w", err)
+		}
+
+		_ = json.Unmarshal(geoRaw, &result.Geolocation)
+		_ = json.Unmarshal(asnRaw, &result.ASN)
+		results = append(results, result)
+	}
+
+	return results, nil
+}
+
+// CreatePortScanResult inserts a port scan result into the database
+func (p *PostgresStorage) CreatePortScanResult(result *model.PortScanResult) error {
+	openPortsJSON, err := json.Marshal(result.OpenPorts)
+	if err != nil {
+		return fmt.Errorf("failed to marshal open ports: %w", err)
+	}
+
+	query := `
+		INSERT INTO port_scan_results (id, asset_id, scan_job_id, ip_address, open_ports_json, closed_ports, total_scanned, scan_duration_ms, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`
+
+	_, err = p.db.Exec(
+		query,
+		result.ID,
+		result.AssetID,
+		result.ScanJobID,
+		result.IPAddress,
+		openPortsJSON,
+		result.ClosedPorts,
+		result.TotalScanned,
+		result.ScanDurationMS,
+		result.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create port scan result: %w", err)
+	}
+
+	return nil
+}
+
+// GetPortScanResultsByScan retrieves port scan results by scan job ID
+func (p *PostgresStorage) GetPortScanResultsByScan(scanJobID string) ([]*model.PortScanResult, error) {
+	query := `
+		SELECT id, asset_id, scan_job_id, ip_address, open_ports_json, closed_ports, total_scanned, scan_duration_ms, created_at
+		FROM port_scan_results
+		WHERE scan_job_id = $1
+		ORDER BY created_at DESC
+	`
+	return p.queryPortScanResults(query, scanJobID)
+}
+
+// GetPortScanResultsByAsset retrieves port scan results by asset ID
+func (p *PostgresStorage) GetPortScanResultsByAsset(assetID string) ([]*model.PortScanResult, error) {
+	query := `
+		SELECT id, asset_id, scan_job_id, ip_address, open_ports_json, closed_ports, total_scanned, scan_duration_ms, created_at
+		FROM port_scan_results
+		WHERE asset_id = $1
+		ORDER BY created_at DESC
+	`
+	return p.queryPortScanResults(query, assetID)
+}
+
+func (p *PostgresStorage) queryPortScanResults(query string, arg string) ([]*model.PortScanResult, error) {
+	rows, err := p.db.Query(query, arg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query port scan results: %w", err)
+	}
+	defer rows.Close()
+
+	results := []*model.PortScanResult{}
+	for rows.Next() {
+		var openPortsRaw []byte
+		result := &model.PortScanResult{}
+		err := rows.Scan(
+			&result.ID,
+			&result.AssetID,
+			&result.ScanJobID,
+			&result.IPAddress,
+			&openPortsRaw,
+			&result.ClosedPorts,
+			&result.TotalScanned,
+			&result.ScanDurationMS,
+			&result.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan port result: %w", err)
+		}
+
+		_ = json.Unmarshal(openPortsRaw, &result.OpenPorts)
+		results = append(results, result)
+	}
+
+	return results, nil
+}
+
 /*
 🎓 NOTES - Scan Storage (Session 5)
 
 === KEY PATTERNS ===
 
 1. **UPSERT with ON CONFLICT**:
-   
+
    Problem: Subdomain might be discovered multiple times
    Solution: ON CONFLICT (asset_id, name) DO UPDATE
-   
+
    ```sql
    INSERT INTO subdomains (...)
    VALUES (...)
@@ -888,49 +1065,49 @@ func (p *PostgresStorage) GetWHOISRecordsByScan(scanJobID string) ([]*model.WHOI
        scan_job_id = EXCLUDED.EXCLUDED.scan_job_id,
        is_active = EXCLUDED.is_active
    ```
-   
+
    Behavior:
    - First time: INSERT new subdomain
    - Second time: UPDATE existing subdomain
    - No duplicate key error!
-   
+
    Use cases:
    - Subdomain found again → update scan_job_id, is_active
    - WHOIS record for same asset/scan → update with new data
 
 2. **Helper Methods for DRY**:
-   
+
    ```go
    func (p *PostgresStorage) GetSubdomainsByAsset(assetID) { ... }
    func (p *PostgresStorage) GetSubdomainsByScan(scanJobID) { ... }
    // Both use:
    func (p *PostgresStorage) querySubdomains(query, arg) { ... }
    ```
-   
+
    Benefits:
    - Avoid duplicating scan logic
    - Single place to fix bugs
    - Consistent error handling
 
 3. **Nullable Fields**:
-   
+
    ```go
    &job.EndedAt,    // *time.Time (nullable)
    &job.Error,      // string (PostgreSQL NULL → empty string)
    ```
-   
+
    PostgreSQL NULL handling:
    - Pointer types (*time.Time): SQL NULL → Go nil
    - String types: SQL NULL → Go empty string
    - No special handling needed!
 
 4. **Ordering**:
-   
+
    ```sql
    ORDER BY created_at DESC  -- Newest first
    ORDER BY created_at DESC, record_type  -- Newest, then by type
    ```
-   
+
    Common patterns:
    - Scan jobs: Most recent first
    - Results: Group by type, newest first
@@ -1017,7 +1194,7 @@ storage.UpdateScanJob(job)
 === COMPARISON WITH SESSION 4 ===
 
 Session 4: Single table (assets)
-Session 5: 
+Session 5:
   - Multiple related tables
   - Foreign key relationships
   - UPSERT operations
@@ -1070,4 +1247,3 @@ These methods follow the same patterns - students can implement!
 
 Storage layer is the foundation - get it right and everything else is easier!
 */
-
